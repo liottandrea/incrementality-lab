@@ -1,205 +1,316 @@
 """
-Synthetic Data Generator for Brightline POV Demo
-Generates realistic sales and marketing data
+Enhanced Synthetic Data Generator for Brightline POV Demo
+Adds retail channels, age segments, transaction data, and promotion types
 """
 
 import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta
-from typing import Dict, Tuple, Optional
+from typing import Dict, List, Tuple, Optional
 import warnings
 warnings.filterwarnings('ignore')
 
 
-class BrightlineSyntheticDataGenerator:
+class EnhancedBrightlineDataGenerator:
     """
-    Generate realistic synthetic data mimicking Brightline's business
+    Generate realistic synthetic data with:
+    - Multiple retail channels (Store, Omnichannel, Online)
+    - Age segmentation
+    - Transaction-level data for online/omnichannel
+    - Different promotion types (Price vs Visibility)
+    - Customer behavior (new customers, stockpiling)
     """
     
     def __init__(self, seed: int = 42):
-        """
-        Initialize generator
-        
-        Args:
-            seed: Random seed for reproducibility
-        """
         np.random.seed(seed)
         self.seed = seed
         
+        # Define retail channels
+        self.retail_channels = {
+            'Store': {
+                'has_transaction_data': False,
+                'has_age_data': False,
+                'promo_types': ['Visibility', 'Positioning', 'Display'],
+                'weight': 0.50  # 50% of business
+            },
+            'Omnichannel': {
+                'has_transaction_data': True,
+                'has_age_data': True,
+                'promo_types': ['Price', 'Visibility', 'Bundle', 'Loyalty'],
+                'weight': 0.30  # 30% of business
+            },
+            'Online_Specialty': {
+                'has_transaction_data': True,
+                'has_age_data': True,
+                'promo_types': ['Price', 'Visibility', 'Banner'],
+                'weight': 0.20  # 20% of business
+            }
+        }
+        
+        # Age segments
+        self.age_segments = ['18-24', '25-34', '35-44', '45-54', '55-64', '65+']
+        
+        # Age-specific behavior
+        self.age_behavior = {
+            '18-24': {'price_sensitivity': 0.30, 'stockpiling_rate': 0.40, 'repeat_rate': 0.50},
+            '25-34': {'price_sensitivity': 0.25, 'stockpiling_rate': 0.35, 'repeat_rate': 0.60},
+            '35-44': {'price_sensitivity': 0.20, 'stockpiling_rate': 0.25, 'repeat_rate': 0.70},
+            '45-54': {'price_sensitivity': 0.15, 'stockpiling_rate': 0.20, 'repeat_rate': 0.75},
+            '55-64': {'price_sensitivity': 0.12, 'stockpiling_rate': 0.15, 'repeat_rate': 0.80},
+            '65+':   {'price_sensitivity': 0.10, 'stockpiling_rate': 0.10, 'repeat_rate': 0.85}
+        }
+    
     def generate_complete_dataset(
         self,
-        n_weeks: int = 104,  # 2 years
-        n_dmas: int = 150,
+        n_weeks: int = 104,
+        n_geos: int = 150,
         start_date: str = '2023-01-01',
-        product_name: str = 'Brightline_HydraCare',
         test_period_weeks: int = 20,
         treatment_pct: float = 0.7,
-        true_effect_size: float = 0.12  # 12% lift
+        price_effect_size: float = 0.15,  # Price promo effect
+        visibility_effect_size: float = 0.08  # Visibility promo effect
     ) -> Dict[str, pd.DataFrame]:
         """
-        Generate complete synthetic dataset
-        
-        Args:
-            n_weeks: Number of weeks of data
-            n_dmas: Number of DMAs/geographic units
-            start_date: Start date for data
-            product_name: Product SKU name
-            test_period_weeks: Length of test period in weeks
-            treatment_pct: % of DMAs in treatment group
-            true_effect_size: True treatment effect to inject
-        
-        Returns:
-            Dictionary with 'sales', 'media', 'controls' DataFrames
+        Generate enhanced dataset with retail channels, age, and promotion types
         """
-        print(f"🎯 Generating synthetic Brightline data...")
-        print(f"   Product: {product_name}")
+        print(f"🎯 Generating enhanced Brightline data...")
         print(f"   Time period: {n_weeks} weeks from {start_date}")
-        print(f"   Geographic units: {n_dmas} DMAs")
+        print(f"   Geographic units: {n_geos} DMAs")
+        print(f"   Retail channels: {list(self.retail_channels.keys())}")
+        print(f"   Age segments: {self.age_segments}")
         print(f"   Test period: Last {test_period_weeks} weeks")
-        print(f"   Treatment allocation: {treatment_pct:.0%}")
-        print(f"   True effect size: {true_effect_size:.1%}")
         
         # Generate dates
         dates = pd.date_range(start=start_date, periods=n_weeks, freq='W-SUN')
         
         # Generate DMAs
-        dmas = [f"DMA_{str(i).zfill(3)}" for i in range(1, n_dmas + 1)]
+        dmas = [f"DMA_{str(i).zfill(3)}" for i in range(1, n_geos + 1)]
         
         # Determine test period
         test_start_idx = n_weeks - test_period_weeks
         test_start_date = dates[test_start_idx]
         
         # Assign treatment/control
-        n_treatment = int(n_dmas * treatment_pct)
+        n_treatment = int(n_geos * treatment_pct)
         treatment_dmas = np.random.choice(dmas, size=n_treatment, replace=False)
         
         print(f"   Treatment DMAs: {len(treatment_dmas)}")
-        print(f"   Control DMAs: {n_dmas - len(treatment_dmas)}")
+        print(f"   Control DMAs: {n_geos - len(treatment_dmas)}")
         
-        # Generate base data structure
-        base_data = []
-        for date_idx, date in enumerate(dates):
-            for dma in dmas:
-                base_data.append({
-                    'date': date,
-                    'geo_id': dma,
-                    'is_treatment': dma in treatment_dmas,
-                    'is_test_period': date >= test_start_date,
-                    'week_num': date_idx
-                })
+        # Generate data for each retail channel
+        all_sales = []
+        all_transactions = []
         
-        base_df = pd.DataFrame(base_data)
+        for channel_name, channel_config in self.retail_channels.items():
+            print(f"\n   Generating {channel_name} data...")
+            
+            if channel_config['has_transaction_data']:
+                # Transaction-level data
+                channel_sales, channel_transactions = self._generate_transaction_data(
+                    dates, dmas, treatment_dmas, test_start_date,
+                    channel_name, channel_config,
+                    price_effect_size, visibility_effect_size
+                )
+                all_transactions.append(channel_transactions)
+            else:
+                # Aggregate data only
+                channel_sales = self._generate_aggregate_data(
+                    dates, dmas, treatment_dmas, test_start_date,
+                    channel_name, channel_config,
+                    visibility_effect_size
+                )
+            
+            all_sales.append(channel_sales)
         
-        # Generate sales
-        sales_df = self._generate_sales(base_df, product_name)
+        # Combine all channels
+        sales_df = pd.concat(all_sales, ignore_index=True)
+        
+        # Combine transactions (if any)
+        if all_transactions:
+            transactions_df = pd.concat(all_transactions, ignore_index=True)
+        else:
+            transactions_df = pd.DataFrame()
         
         # Generate media spend
-        media_df = self._generate_media(base_df)
+        media_df = self._generate_media_spend(dates, dmas, treatment_dmas, test_start_date)
         
-        # Generate control variables
-        controls_df = self._generate_controls(base_df)
-
-        # Merge treatment info back into sales for effect injection
-        sales_df = sales_df.merge(
-            base_df[['date', 'geo_id', 'is_treatment', 'is_test_period']], 
-            on=['date', 'geo_id'], 
-            how='left'
-        )
+        # Generate controls
+        controls_df = self._generate_controls(dates, dmas)
         
-        # Inject treatment effect
-        sales_df = self._inject_treatment_effect(
-            sales_df, 
-            effect_size=true_effect_size
-        )
-        
-        # Clean up temporary columns
-        for df in [sales_df, media_df, controls_df]:
-            df.drop(['is_treatment', 'is_test_period', 'week_num'], 
-                   axis=1, errors='ignore', inplace=True)
-        
-        print(f"\n✅ Data generation complete!")
+        print(f"\n✅ Enhanced data generation complete!")
         print(f"   Sales records: {len(sales_df):,}")
+        if len(transactions_df) > 0:
+            print(f"   Transaction records: {len(transactions_df):,}")
         print(f"   Media records: {len(media_df):,}")
-        print(f"   Control records: {len(controls_df):,}")
         
         return {
             'sales': sales_df,
+            'transactions': transactions_df,
             'media': media_df,
             'controls': controls_df,
             'metadata': {
-                'product': product_name,
                 'n_weeks': n_weeks,
-                'n_dmas': n_dmas,
+                'n_dmas': n_geos,
                 'test_start_date': str(test_start_date),
                 'treatment_dmas': treatment_dmas.tolist(),
-                'true_effect_size': true_effect_size
+                'price_effect_size': price_effect_size,
+                'visibility_effect_size': visibility_effect_size,
+                'retail_channels': list(self.retail_channels.keys())
             }
         }
     
-    def _generate_sales(
-        self, 
-        base_df: pd.DataFrame,
-        product_name: str
-    ) -> pd.DataFrame:
+    def _generate_transaction_data(
+        self, dates, dmas, treatment_dmas, test_start_date,
+        channel_name, channel_config, price_effect, visibility_effect
+    ):
         """
-        Generate sales data with realistic patterns
+        Generate transaction-level data for online/omnichannel channels
         """
-        df = base_df.copy()
+        transactions = []
+        sales_summary = []
         
-        # Base sales level by DMA (heterogeneous market sizes)
-        dma_base_sales = {
-            dma: np.random.gamma(shape=2.0, scale=1200)
-            for dma in df['geo_id'].unique()
-        }
-        df['base_sales'] = df['geo_id'].map(dma_base_sales)
+        # Number of customers per DMA
+        customers_per_dma = 500  # Average
         
-        # Seasonality (skincare sells more in winter - dry skin season)
-        # Peak in Jan-Feb, trough in summer
-        df['week_of_year'] = pd.to_datetime(df['date']).dt.isocalendar().week
-        df['seasonality'] = 1 + 0.25 * np.cos(2 * np.pi * (df['week_of_year'] - 6) / 52)
+        for date in dates:
+            is_test_period = date >= test_start_date
+            
+            for dma in dmas:
+                is_treatment = dma in treatment_dmas
+                
+                # Randomly select promotion type for this week
+                promo_type = np.random.choice(channel_config['promo_types'])
+                has_promo = np.random.random() < 0.3  # 30% of weeks have promos
+                
+                # Base number of transactions
+                base_transactions = int(np.random.normal(customers_per_dma * 0.15, 30))
+                
+                # Apply treatment effect during test period
+                if is_test_period and is_treatment and has_promo:
+                    if promo_type == 'Price':
+                        lift_factor = 1 + price_effect
+                    else:
+                        lift_factor = 1 + visibility_effect
+                else:
+                    lift_factor = 1.0
+                
+                n_transactions = int(base_transactions * lift_factor * channel_config['weight'])
+                
+                # Generate individual transactions
+                for _ in range(n_transactions):
+                    # Generate customer
+                    customer_id = f"{dma}_{channel_name}_{np.random.randint(1, customers_per_dma)}"
+                    
+                    # Assign age segment
+                    age_segment = np.random.choice(self.age_segments)
+                    age_behavior = self.age_behavior[age_segment]
+                    
+                    # Is this a new customer?
+                    is_new = np.random.random() < 0.15  # 15% are new
+                    
+                    # Units purchased
+                    base_units = 1
+                    
+                    # Stockpiling behavior (buy extra during price promos)
+                    if promo_type == 'Price' and has_promo:
+                        if np.random.random() < age_behavior['stockpiling_rate']:
+                            base_units = np.random.choice([2, 3, 4], p=[0.6, 0.3, 0.1])
+                    
+                    # Price per unit
+                    base_price = 15.0
+                    if promo_type == 'Price' and has_promo:
+                        discount = np.random.uniform(0.15, 0.30)
+                        price = base_price * (1 - discount)
+                    else:
+                        price = base_price * np.random.uniform(0.95, 1.05)
+                    
+                    # Revenue
+                    revenue = base_units * price
+                    
+                    transactions.append({
+                        'date': date,
+                        'geo_id': dma,
+                        'retail_channel': channel_name,
+                        'customer_id': customer_id,
+                        'age_segment': age_segment,
+                        'is_new_customer': is_new,
+                        'units': base_units,
+                        'price_per_unit': price,
+                        'revenue': revenue,
+                        'promo_type': promo_type if has_promo else 'None',
+                        'is_treatment': is_treatment,
+                        'is_test_period': is_test_period
+                    })
+                
+                # Aggregate for sales summary
+                day_transactions = [t for t in transactions if t['date'] == date and t['geo_id'] == dma]
+                if day_transactions:
+                    total_units = sum(t['units'] for t in day_transactions)
+                    total_revenue = sum(t['revenue'] for t in day_transactions)
+                    n_new_customers = sum(t['is_new_customer'] for t in day_transactions)
+                    
+                    sales_summary.append({
+                        'date': date,
+                        'geo_id': dma,
+                        'retail_channel': channel_name,
+                        'sales_units': total_units,
+                        'sales_revenue': total_revenue,
+                        'n_transactions': len(day_transactions),
+                        'n_new_customers': n_new_customers,
+                        'promo_type': promo_type if has_promo else 'None'
+                    })
         
-        # Trend (slowly growing brand)
-        df['trend'] = 1 + 0.0015 * df['week_num']  # ~0.15% weekly growth
-        
-        # Random week-to-week variation
-        df['random_shock'] = np.random.normal(1, 0.12, size=len(df))
-        
-        # Calculate base sales units
-        df['sales_units'] = (
-            df['base_sales'] * 
-            df['seasonality'] * 
-            df['trend'] * 
-            df['random_shock']
-        ).clip(0).round()
-        
-        # Price with some variation
-        base_price = 15.00
-        # df['price_per_unit'] = np.random.normal(base_price, 0.75, size=len(df)).clip(lower=12, upper=18)
-        df['price_per_unit'] = np.random.normal(base_price, 0.75, size=len(df)).clip(12, 18)
-
-        # Promotions (20% of weeks, boost sales by 18-25%)
-        df['promo_flag'] = np.random.binomial(1, 0.20, size=len(df))
-        promo_lift = np.random.uniform(1.18, 1.25, size=len(df))
-        df.loc[df['promo_flag'] == 1, 'sales_units'] *= promo_lift[df['promo_flag'] == 1]
-        
-        # Calculate revenue
-        df['sales_revenue'] = df['sales_units'] * df['price_per_unit']
-        
-        # Add product info
-        df['product_sku'] = product_name
-        
-        return df[[
-            'date', 'geo_id', 'product_sku', 
-            'sales_units', 'sales_revenue', 'promo_flag'
-        ]]
+        return pd.DataFrame(sales_summary), pd.DataFrame(transactions)
     
-    def _generate_media(self, base_df: pd.DataFrame) -> pd.DataFrame:
+    def _generate_aggregate_data(
+        self, dates, dmas, treatment_dmas, test_start_date,
+        channel_name, channel_config, visibility_effect
+    ):
+        """
+        Generate aggregate sales data for store channel (no transaction-level data)
+        """
+        sales = []
+        
+        for date in dates:
+            is_test_period = date >= test_start_date
+            
+            for dma in dmas:
+                is_treatment = dma in treatment_dmas
+                
+                # Randomly select promotion type
+                promo_type = np.random.choice(channel_config['promo_types'])
+                has_promo = np.random.random() < 0.25  # 25% of weeks
+                
+                # Base sales
+                base_sales = np.random.gamma(shape=2.0, scale=1500) * channel_config['weight']
+                
+                # Apply treatment effect
+                if is_test_period and is_treatment and has_promo:
+                    lift_factor = 1 + visibility_effect
+                else:
+                    lift_factor = 1.0
+                
+                sales_units = base_sales * lift_factor
+                sales_revenue = sales_units * 15.0  # Fixed price
+                
+                sales.append({
+                    'date': date,
+                    'geo_id': dma,
+                    'retail_channel': channel_name,
+                    'sales_units': sales_units,
+                    'sales_revenue': sales_revenue,
+                    'n_transactions': np.nan,  # Not available
+                    'n_new_customers': np.nan,  # Not available
+                    'promo_type': promo_type if has_promo else 'None'
+                })
+        
+        return pd.DataFrame(sales)
+    
+    def _generate_media_spend(self, dates, dmas, treatment_dmas, test_start_date):
         """
         Generate media spend data
         """
         channels = ['Meta', 'Google', 'Amazon', 'TikTok']
-        
-        # Base spend by channel
         channel_base_spend = {
             'Meta': 3500,
             'Google': 2800,
@@ -209,163 +320,103 @@ class BrightlineSyntheticDataGenerator:
         
         media_rows = []
         
-        for _, row in base_df.iterrows():
-            for channel in channels:
-                base_spend = channel_base_spend[channel]
+        for date in dates:
+            is_test_period = date >= test_start_date
+            
+            for dma in dmas:
+                is_treatment = dma in treatment_dmas
                 
-                # Add DMA-level variation (bigger DMAs get more spend)
-                dma_factor = 0.7 + 0.6 * np.random.random()
-                
-                # Add week-to-week variation
-                weekly_variation = np.random.uniform(0.85, 1.15)
-                
-                spend = base_spend * dma_factor * weekly_variation
-                
-                # Treatment group gets 30% more spend during test period
-                if row['is_test_period'] and row['is_treatment']:
-                    spend *= 1.30
-                
-                # Generate corresponding metrics
-                # Impressions: ~50-60 per dollar
-                impressions = int(spend * np.random.uniform(48, 62))
-                
-                # CTR: 2.5-4%
-                clicks = int(impressions * np.random.uniform(0.025, 0.04))
-                
-                media_rows.append({
-                    'date': row['date'],
-                    'geo_id': row['geo_id'],
-                    'channel': channel,
-                    'spend_usd': round(spend, 2),
-                    'impressions': impressions,
-                    'clicks': clicks
-                })
+                for channel in channels:
+                    base_spend = channel_base_spend[channel]
+                    spend = base_spend * np.random.uniform(0.85, 1.15)
+                    
+                    # Treatment boost during test
+                    if is_test_period and is_treatment:
+                        spend *= 1.30
+                    
+                    media_rows.append({
+                        'date': date,
+                        'geo_id': dma,
+                        'channel': channel,
+                        'spend_usd': round(spend, 2),
+                        'impressions': int(spend * np.random.uniform(48, 62)),
+                        'clicks': int(spend * np.random.uniform(1.2, 1.8))
+                    })
         
         return pd.DataFrame(media_rows)
     
-    def _generate_controls(self, base_df: pd.DataFrame) -> pd.DataFrame:
+    def _generate_controls(self, dates, dmas):
         """
-        Generate control/covariate data
+        Generate control variables
         """
-        df = base_df[['date', 'geo_id']].copy()
+        controls = []
         
-        # Temperature (seasonal, varies by week)
-        df['week_of_year'] = pd.to_datetime(df['date']).dt.isocalendar().week
-        df['temperature'] = (
-            55 + 
-            25 * np.cos(2 * np.pi * (df['week_of_year'] - 1) / 52) +
-            np.random.normal(0, 6, size=len(df))
-        )
+        for date in dates:
+            week_of_year = date.isocalendar()[1]
+            
+            for dma in dmas:
+                # Temperature
+                temp = 55 + 25 * np.cos(2 * np.pi * (week_of_year - 1) / 52) + np.random.normal(0, 6)
+                
+                # Holidays
+                holiday_weeks = [1, 24, 47, 52]
+                holiday_flag = 1 if week_of_year in holiday_weeks else 0
+                
+                # Competitor promo
+                competitor_promo = np.random.binomial(1, 0.15)
+                
+                controls.append({
+                    'date': date,
+                    'geo_id': dma,
+                    'temperature': temp,
+                    'holiday_flag': holiday_flag,
+                    'competitor_promo': competitor_promo
+                })
         
-        # Holiday weeks
-        holiday_weeks = [1, 24, 47, 52]  # New Year, Memorial Day, Thanksgiving, Christmas
-        df['holiday_flag'] = df['week_of_year'].isin(holiday_weeks).astype(int)
-        
-        # Competitor promotion activity (15% of weeks)
-        df['competitor_promo'] = np.random.binomial(1, 0.15, size=len(df))
-        
-        # Consumer confidence index (slowly changing)
-        base_confidence = 100
-        df['consumer_confidence'] = (
-            base_confidence + 
-            5 * np.sin(2 * np.pi * df['week_of_year'] / 52) +
-            np.random.normal(0, 2, size=len(df))
-        )
-        
-        df.drop('week_of_year', axis=1, inplace=True)
-        
-        return df
+        return pd.DataFrame(controls)
     
-    def _inject_treatment_effect(
-        self,
-        sales_df: pd.DataFrame,
-        effect_size: float = 0.12
-    ) -> pd.DataFrame:
+    def save_datasets(self, datasets: Dict, output_dir: str = 'data/synthetic_v2'):
         """
-        Inject realistic treatment effect
-        
-        Effect is:
-        - Only in test period
-        - Only for treatment DMAs
-        - Proportional to existing sales (multiplicative)
-        """
-        df = sales_df.copy()
-        
-        # Apply effect
-        mask = df['is_test_period'] & df['is_treatment']
-        
-        # Multiplicative lift
-        df.loc[mask, 'sales_units'] *= (1 + effect_size)
-        df.loc[mask, 'sales_revenue'] *= (1 + effect_size)
-        
-        n_affected = mask.sum()
-        print(f"   💉 Injected {effect_size:.1%} treatment effect into {n_affected:,} records")
-        
-        return df
-    
-    def save_datasets(
-        self,
-        datasets: Dict[str, pd.DataFrame],
-        output_dir: str = 'data/synthetic'
-    ):
-        """
-        Save generated datasets to CSV
+        Save generated datasets
         """
         import os
         import json
         
         os.makedirs(output_dir, exist_ok=True)
         
-        # Save data files
         for name, df in datasets.items():
             if name == 'metadata':
                 continue
-            filepath = os.path.join(output_dir, f'brightline_{name}.csv')
-            df.to_csv(filepath, index=False)
-            print(f"✅ Saved: {filepath}")
+            if not df.empty:
+                filepath = os.path.join(output_dir, f'brightline_{name}_v2.csv')
+                df.to_csv(filepath, index=False)
+                print(f"✅ Saved: {filepath}")
         
-        # Save metadata
         if 'metadata' in datasets:
-            metadata_path = os.path.join(output_dir, 'metadata.json')
+            metadata_path = os.path.join(output_dir, 'metadata_v2.json')
             with open(metadata_path, 'w') as f:
                 json.dump(datasets['metadata'], f, indent=2)
             print(f"✅ Saved: {metadata_path}")
 
 
-# Quick test / demo
+# Test
 if __name__ == "__main__":
-    # Generate data
-    generator = BrightlineSyntheticDataGenerator(seed=42)
+    generator = EnhancedBrightlineDataGenerator(seed=42)
     
     datasets = generator.generate_complete_dataset(
         n_weeks=104,
-        n_dmas=150,
+        n_geos=150,
         test_period_weeks=20,
         treatment_pct=0.7,
-        true_effect_size=0.12
+        price_effect_size=0.15,
+        visibility_effect_size=0.08
     )
     
-    # Save to files
     generator.save_datasets(datasets)
     
-    # Print summary
-    print("\n" + "="*60)
-    print("📊 DATA SUMMARY")
-    print("="*60)
-    
-    sales_df = datasets['sales']
-    media_df = datasets['media']
-    
-    print(f"\nSales Data:")
-    print(f"  Total records: {len(sales_df):,}")
-    print(f"  Date range: {sales_df['date'].min()} to {sales_df['date'].max()}")
-    print(f"  Total revenue: ${sales_df['sales_revenue'].sum():,.0f}")
-    print(f"  Avg weekly revenue per DMA: ${sales_df.groupby(['date', 'geo_id'])['sales_revenue'].sum().mean():,.0f}")
-    
-    print(f"\nMedia Data:")
-    print(f"  Total records: {len(media_df):,}")
-    print(f"  Channels: {', '.join(media_df['channel'].unique())}")
-    print(f"  Total spend: ${media_df['spend_usd'].sum():,.0f}")
-    print(f"  Avg weekly spend per DMA: ${media_df.groupby(['date', 'geo_id'])['spend_usd'].sum().mean():,.0f}")
-    
-    print("\n✅ Data generation complete!")
+    print("\n📊 Dataset Summary:")
+    print(f"Sales: {len(datasets['sales']):,} rows")
+    print(f"Transactions: {len(datasets['transactions']):,} rows")
+    print(f"Channels: {datasets['sales']['retail_channel'].unique()}")
+    if not datasets['transactions'].empty:
+        print(f"Age segments: {datasets['transactions']['age_segment'].unique()}")
