@@ -1063,14 +1063,14 @@ with tab5:
                 roas_val = roi[key]['profit_roas']
                 color = "#006E74" if roi_val > 0 else "#FF6B00"
                 
-                # st.markdown(f"""
-                # <div class='ust-card' style='border-top-color: {color};'>
-                #     <div class='ust-eyebrow'>{label}</div>
-                #     <p style='font-size: 0.9rem; color: #666; margin: 4px 0;'>{sublabel}</p>
-                #     <h2 style='color: {color}; font-size: 2.5rem; margin: 12px 0;'>{roi_val:.1f}%</h2>
-                #     <p style='color: #666;'>ROAS: {roas_val:.2f}x</p>
-                # </div>
-                # """, unsafe_allow_html=True)
+                st.markdown(f"""
+                <div class='ust-card' style='border-top-color: {color};'>
+                    <div class='ust-eyebrow'>{label}</div>
+                    <p style='font-size: 0.9rem; color: #666; margin: 4px 0;'>{sublabel}</p>
+                    <h2 style='color: {color}; font-size: 2.5rem; margin: 12px 0;'>{roi_val:.1f}%</h2>
+                    <p style='color: #666;'>ROAS: {roas_val:.2f}x</p>
+                </div>
+                """, unsafe_allow_html=True)
         
         st.markdown("---")
         
