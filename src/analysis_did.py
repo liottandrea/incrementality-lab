@@ -316,7 +316,7 @@ if __name__ == "__main__":
     # Run regression DiD (if statsmodels available)
     if HAS_STATSMODELS:
         regression_results = did.estimate_effect_regression(
-            covariates=['promo_flag', 'temperature', 'holiday_flag']
+            covariates=['promo_flag', 'holiday_flag']
         )
         
         # Calculate ROAS
