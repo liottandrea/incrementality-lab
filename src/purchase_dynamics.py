@@ -390,17 +390,17 @@ class PurchaseDynamicsAnalyzer:
 # Test
 if __name__ == "__main__":
     # Load enhanced data
-    sales_df = pd.read_csv('data/synthetic_v2/brightline_sales_v2.csv')
+    sales_df = pd.read_csv('data/demo/demo_sales.csv')
     
     # Try to load transactions
     try:
-        transactions_df = pd.read_csv('data/synthetic_v2/brightline_transactions_v2.csv')
+        transactions_df = pd.read_csv('data/demo/demo_transactions.csv')
     except:
         transactions_df = None
     
     # Load metadata
     import json
-    with open('data/synthetic_v2/metadata_v2.json', 'r') as f:
+    with open('data/demo/demo_metadata.json', 'r') as f:
         metadata = json.load(f)
     
     # Run analysis

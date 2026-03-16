@@ -20,9 +20,9 @@ datasets = generator.generate_complete_dataset(
     post_period_weeks=12,    # 12 weeks post
     treatment_pct=0.7,
     price_effect=0.30,
-    visibility_effect=0.18,
-    sustained_effect=0.12,   # 12% sustained lift post-test
-    spend_increase=0.20
+    visibility_effect=0.16,
+    sustained_effect=0.14,   # 12% sustained lift post-test
+    spend_increase=0.10
 )
 
 generator.save_datasets(datasets)

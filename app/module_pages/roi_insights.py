@@ -59,7 +59,7 @@ def render():
             roi_results = roi_calculator.calculate_complete_roi(
                 test_start_date=st.session_state.metadata['test_start_date'],
                 treatment_dmas=st.session_state.metadata['treatment_dmas'],
-                profit_margin=0.40,
+                profit_margin=0.80,
                 avg_clv=150.0,
                 retention_rate=0.60
             )
@@ -79,9 +79,9 @@ def render():
         <h4>Why Multiple Time Horizons?</h4>
         <p><strong>Marketing impact unfolds over time:</strong></p>
         <ul>
-            <li><strong>Short-Term (4 weeks):</strong> Immediate campaign effects, quick wins</li>
-            <li><strong>Medium-Term (12 weeks):</strong> Sustained behavioral changes, repeat purchases</li>
-            <li><strong>Long-Term (with CLV):</strong> Full customer lifetime value, brand loyalty</li>
+            <li><strong>Test Period:</strong> During active campaign - immediate effects</li>
+            <li><strong>Test + Post Period:</strong> Sustained effects after campaign ends - long-term behavior change</li>
+            <li><strong>With Customer LTV:</strong> Full customer lifetime value including future purchases</li>
         </ul>
         <p>Understanding all three perspectives ensures balanced decision-making.</p>
     </div>
@@ -91,9 +91,9 @@ def render():
     col1, col2, col3 = st.columns(3)
 
     periods_config = [
-        ('short_term', 'Short-Term ROI', 'Weeks 1-4', col1, '#FF6B00'),
-        ('medium_term', 'Medium-Term ROI', 'Weeks 1-12', col2, '#0097AC'),
-        ('long_term', 'Long-Term ROI', 'With Customer LTV', col3, '#006E74')
+        ('short_term', 'Test Period ROI', 'During campaign', col1, '#FF6B00'),
+        ('medium_term', 'Sustained ROI', 'Test + Post periods', col2, '#0097AC'),
+        ('long_term', 'Full LTV ROI', 'With customer lifetime value', col3, '#006E74')
     ]
 
     for key, label, sublabel, col, color in periods_config:
@@ -157,7 +157,7 @@ def render():
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
 
     # Chart 1: ROI by Period
-    periods = ['Short-Term\n(4 weeks)', 'Medium-Term\n(12 weeks)', 'Long-Term\n(with CLV)']
+    periods = ['Test Period\n(Campaign)', 'Sustained\n(Test + Post)', 'Full LTV\n(w/ CLV)']
     roi_values = [roi['short_term']['roi_pct'], roi['medium_term']['roi_pct'], roi['long_term']['roi_pct']]
     colors_roi = ['#FF6B00', '#0097AC', '#006E74']
 
@@ -198,7 +198,7 @@ def render():
     col1, col2 = st.columns(2)
 
     with col1:
-        best_period = max([('short_term', 'Short-Term'), ('medium_term', 'Medium-Term'), ('long_term', 'Long-Term')],
+        best_period = max([('short_term', 'Test Period'), ('medium_term', 'Sustained Effect'), ('long_term', 'Full LTV')],
                          key=lambda x: roi[x[0]]['roi_pct'])
         best_roi = roi[best_period[0]]['roi_pct']
 
@@ -207,8 +207,8 @@ def render():
             <h4>🏆 Best Performance</h4>
             <p><strong>{best_period[1]}</strong> delivers the highest ROI at <strong>{best_roi:+.1f}%</strong>.</p>
             <p>This suggests {"immediate campaign effectiveness" if best_period[0] == 'short_term'
-               else "sustained value creation" if best_period[0] == 'medium_term'
-               else "strong customer lifetime value"} drives overall returns.</p>
+               else "durable post-campaign effects and sustained behavior change" if best_period[0] == 'medium_term'
+               else "strong customer lifetime value from acquisition"} drives overall returns.</p>
         </div>
         """)
 
@@ -247,87 +247,82 @@ def render():
     </div>
     """)
 
-    # Calculate channel-level ROI (simplified approach using treatment effects)
-    channel_effects = st.session_state.hte_results['channel_effects']
+    # Use channel-level ROI from the ROI calculator (already computed correctly)
+    if 'channel_roi' in roi and roi['channel_roi']:
+        # Use the properly calculated channel ROI from MultiPeriodROI
+        channel_roi_results = roi['channel_roi']
+        channel_effects = st.session_state.hte_results['channel_effects']
 
-    channel_roi_data = []
-    for channel, metrics in channel_effects.items():
-        # Simplified ROI calculation based on lift
-        pct_lift = metrics['pct_lift']
-        treatment_effect = metrics['treatment_effect']
+        channel_roi_data = []
+        for channel, roi_metrics in channel_roi_results.items():
+            # Get lift from HTE results
+            pct_lift = channel_effects[channel]['pct_lift']
 
-        # Approximate investment per channel (simplified)
-        media_df = st.session_state.media_df
-        treatment_dmas = st.session_state.metadata['treatment_dmas']
+            channel_roi_data.append({
+                'Channel': channel,
+                'ROI (%)': roi_metrics['roi_pct'],
+                'ROAS': roi_metrics['profit_roas'],
+                'Lift (%)': pct_lift,
+                'Investment': roi_metrics['allocated_spend']
+            })
 
-        channel_spend = media_df[
-            (media_df['geo_id'].isin(treatment_dmas)) &
-            (media_df['date'] >= st.session_state.metadata['test_start_date'])
-        ]['spend_usd'].sum() / len(channel_effects)  # Simplified equal distribution
+        channel_roi_df = pd.DataFrame(channel_roi_data).sort_values('ROI (%)', ascending=False)
+    else:
+        # Fallback: no channel ROI available
+        st.warning("Channel-level ROI not available. Please ensure the analysis was run with HTE results.")
+        channel_roi_df = pd.DataFrame()
 
-        channel_roi = ((treatment_effect * 0.40) / channel_spend - 1) * 100 if channel_spend > 0 else 0
-        channel_roas = (treatment_effect * 0.40) / channel_spend if channel_spend > 0 else 0
+    if len(channel_roi_df) > 0:
+        col1, col2 = st.columns([2, 1])
 
-        channel_roi_data.append({
-            'Channel': channel,
-            'ROI (%)': channel_roi,
-            'ROAS': channel_roas,
-            'Lift (%)': pct_lift,
-            'Investment': channel_spend
-        })
+        with col1:
+            fig, ax = plt.subplots(figsize=(10, 6))
 
-    channel_roi_df = pd.DataFrame(channel_roi_data).sort_values('ROI (%)', ascending=False)
+            colors_channel = ['#FF6B00' if i == 0 else '#006E74' if roi >= 0 else '#DC3545'
+                             for i, roi in enumerate(channel_roi_df['ROI (%)'])]
 
-    col1, col2 = st.columns([2, 1])
+            bars = ax.barh(channel_roi_df['Channel'], channel_roi_df['ROI (%)'],
+                          color=colors_channel, edgecolor='black', linewidth=2, alpha=0.8)
 
-    with col1:
-        fig, ax = plt.subplots(figsize=(10, 6))
+            ax.axvline(0, color='black', linestyle='-', linewidth=1, alpha=0.5)
+            ax.set_xlabel('ROI (%)', fontsize=12, fontweight='bold')
+            ax.set_title('Return on Investment by Retail Channel', fontsize=14, fontweight='bold', color='#006E74')
+            ax.grid(True, alpha=0.3, axis='x')
 
-        colors_channel = ['#FF6B00' if i == 0 else '#006E74' if roi >= 0 else '#DC3545'
-                         for i, roi in enumerate(channel_roi_df['ROI (%)'])]
+            # Add value labels
+            for i, (idx, row) in enumerate(channel_roi_df.iterrows()):
+                label_x = row['ROI (%)'] + (2 if row['ROI (%)'] >= 0 else -2)
+                ha = 'left' if row['ROI (%)'] >= 0 else 'right'
+                ax.text(label_x, i, f"{row['ROI (%)']:.1f}%", va='center', ha=ha, fontweight='bold', fontsize=10)
 
-        bars = ax.barh(channel_roi_df['Channel'], channel_roi_df['ROI (%)'],
-                      color=colors_channel, edgecolor='black', linewidth=2, alpha=0.8)
+            plt.tight_layout()
+            st.pyplot(fig)
 
-        ax.axvline(0, color='black', linestyle='-', linewidth=1, alpha=0.5)
-        ax.set_xlabel('ROI (%)', fontsize=12, fontweight='bold')
-        ax.set_title('Return on Investment by Retail Channel', fontsize=14, fontweight='bold', color='#006E74')
-        ax.grid(True, alpha=0.3, axis='x')
+        with col2:
+            best_channel_roi = channel_roi_df.iloc[0]
 
-        # Add value labels
-        for i, (idx, row) in enumerate(channel_roi_df.iterrows()):
-            label_x = row['ROI (%)'] + (2 if row['ROI (%)'] >= 0 else -2)
-            ha = 'left' if row['ROI (%)'] >= 0 else 'right'
-            ax.text(label_x, i, f"{row['ROI (%)']:.1f}%", va='center', ha=ha, fontweight='bold', fontsize=10)
+            st.html(f"""
+            <div class='ust-card ust-card-accent'>
+                <div class='ust-eyebrow'>Highest ROI Channel</div>
+                <h2 style='color: #FF6B00; margin: 12px 0; font-size: 1.3rem;'>{best_channel_roi['Channel']}</h2>
+                <h1 style='color: #006E74; margin: 8px 0;'>{best_channel_roi['ROI (%)']:+.1f}%</h1>
+                <p style='color: #666; margin: 4px 0;'>ROAS: ${best_channel_roi['ROAS']:.2f}</p>
+                <p style='color: #666; margin: 4px 0;'>Lift: {best_channel_roi['Lift (%)']:+.1f}%</p>
+            </div>
+            """)
 
-        plt.tight_layout()
-        st.pyplot(fig)
+            st.metric("Positive ROI Channels", sum(channel_roi_df['ROI (%)'] > 0))
+            st.metric("Total Channels", len(channel_roi_df))
 
-    with col2:
-        best_channel_roi = channel_roi_df.iloc[0]
+        # Detailed table
+        with st.expander("📊 Detailed Channel ROI Comparison"):
+            display_df = channel_roi_df.copy()
+            display_df['ROI (%)'] = display_df['ROI (%)'].apply(lambda x: f"{x:+.1f}%")
+            display_df['ROAS'] = display_df['ROAS'].apply(lambda x: f"${x:.2f}")
+            display_df['Lift (%)'] = display_df['Lift (%)'].apply(lambda x: f"{x:+.1f}%")
+            display_df['Investment'] = display_df['Investment'].apply(lambda x: f"${x:,.0f}")
 
-        st.html(f"""
-        <div class='ust-card ust-card-accent'>
-            <div class='ust-eyebrow'>Highest ROI Channel</div>
-            <h2 style='color: #FF6B00; margin: 12px 0; font-size: 1.3rem;'>{best_channel_roi['Channel']}</h2>
-            <h1 style='color: #006E74; margin: 8px 0;'>{best_channel_roi['ROI (%)']:+.1f}%</h1>
-            <p style='color: #666; margin: 4px 0;'>ROAS: ${best_channel_roi['ROAS']:.2f}</p>
-            <p style='color: #666; margin: 4px 0;'>Lift: {best_channel_roi['Lift (%)']:+.1f}%</p>
-        </div>
-        """)
-
-        st.metric("Positive ROI Channels", sum(channel_roi_df['ROI (%)'] > 0))
-        st.metric("Total Channels", len(channel_roi_df))
-
-    # Detailed table
-    with st.expander("📊 Detailed Channel ROI Comparison"):
-        display_df = channel_roi_df.copy()
-        display_df['ROI (%)'] = display_df['ROI (%)'].apply(lambda x: f"{x:+.1f}%")
-        display_df['ROAS'] = display_df['ROAS'].apply(lambda x: f"${x:.2f}")
-        display_df['Lift (%)'] = display_df['Lift (%)'].apply(lambda x: f"{x:+.1f}%")
-        display_df['Investment'] = display_df['Investment'].apply(lambda x: f"${x:,.0f}")
-
-        st.dataframe(display_df, use_container_width=True, hide_index=True)
+            st.dataframe(display_df, use_container_width=True, hide_index=True)
 
     st.markdown("---")
 
@@ -607,10 +602,10 @@ def render():
     incremental_revenue = treat_revenue - ctrl_revenue_scaled
 
     # Cost of Goods Sold (60% of revenue, leaving 40% margin)
-    cogs = incremental_revenue * 0.60
+    cogs = incremental_revenue * 0.20
 
     # Gross Profit
-    gross_profit = incremental_revenue * 0.40
+    gross_profit = incremental_revenue * 0.80
 
     # Marketing Costs
     media_spend = media_df[
@@ -623,7 +618,7 @@ def render():
         (test_sales['promo_type'] == 'Price') &
         (test_sales['is_treatment'])
     ]['sales_revenue'].sum()
-    price_discount_cost = price_promo_sales * 0.15  # 15% discount
+    price_discount_cost = price_promo_sales * 0.10  # 15% discount
 
     # Visibility Promotion Cost
     visibility_weeks = test_sales[
@@ -631,7 +626,7 @@ def render():
         (test_sales['is_treatment'])
     ]['date'].nunique()
     stores_per_dma = 25
-    visibility_cost = n_treat * stores_per_dma * visibility_weeks * 200  # $200/store/week
+    visibility_cost = n_treat * stores_per_dma * visibility_weeks * 20  # $200/store/week
 
     # Total Marketing Investment
     total_marketing = media_spend + price_discount_cost + visibility_cost

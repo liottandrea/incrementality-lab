@@ -19,7 +19,7 @@ def render():
     st.markdown("""
     <div class='ust-info-box'>
         <strong>Building resilience through data.</strong><br>
-        Connect to the Brightline RCT database to load campaign data for incrementality analysis.
+        Connect to the RCT database to load campaign data for incrementality analysis.
     </div>
     """, unsafe_allow_html=True)
 
@@ -36,8 +36,8 @@ def render():
         st.markdown("""
         <div class='ust-card ust-card-info'>
             <div class='ust-eyebrow'>Connection Details</div>
-            <p style='margin: 8px 0;'><strong>Host:</strong> brightline-analytics-prod.database.windows.net</p>
-            <p style='margin: 8px 0;'><strong>Database:</strong> brightline_rct_prod</p>
+            <p style='margin: 8px 0;'><strong>Host:</strong> analytics-prod.database.windows.net</p>
+            <p style='margin: 8px 0;'><strong>Database:</strong> rct_prod</p>
             <p style='margin: 8px 0;'><strong>Schema:</strong> marketing_analytics</p>
             <p style='margin: 8px 0;'><strong>Port:</strong> 1433</p>
             <p style='margin: 8px 0;'><strong>Driver:</strong> SQL Server Native Client 11.0</p>
@@ -106,6 +106,7 @@ def render():
 
                     st.success("✅ Data loaded successfully from database!")
                     # st.balloons()
+                    # st.rerun()
 
                 except FileNotFoundError:
                     st.error("⚠️ Database connection failed. Please check connection settings.")
@@ -354,7 +355,7 @@ INDEX idx_controls_geo: (geo_id)
         with col1:
             st.markdown("**Experiment Configuration**")
             st.json({
-                "experiment_id": "RCT_BRIGHTLINE_2024_Q1",
+                "experiment_id": "RCT_ABC_2024_Q1",
                 "experiment_name": "Marketing Incrementality Test",
                 "test_start_date": st.session_state.metadata['test_start_date'],
                 "n_weeks": st.session_state.metadata['n_weeks'],

@@ -108,22 +108,22 @@ def render():
     test_start = pd.to_datetime(st.session_state.metadata['test_start_date'])
     sales_df['date'] = pd.to_datetime(sales_df['date'])
 
-    # DiD calculation
-    treatment_pre = sales_df[(sales_df['is_treatment']) & (~sales_df['is_test_period'])]['sales_revenue'].mean()
-    treatment_post = sales_df[(sales_df['is_treatment']) & (sales_df['is_test_period'])]['sales_revenue'].mean()
-    control_pre = sales_df[(~sales_df['is_treatment']) & (~sales_df['is_test_period'])]['sales_revenue'].mean()
-    control_post = sales_df[(~sales_df['is_treatment']) & (sales_df['is_test_period'])]['sales_revenue'].mean()
+    # DiD calculation using test + post periods for full effect
+    treatment_pre = sales_df[(sales_df['is_treatment']) & (sales_df['is_pre_period'])]['sales_revenue'].mean()
+    treatment_post = sales_df[(sales_df['is_treatment']) & ((sales_df['is_test_period']) | (sales_df['is_post_period']))]['sales_revenue'].mean()
+    control_pre = sales_df[(~sales_df['is_treatment']) & (sales_df['is_pre_period'])]['sales_revenue'].mean()
+    control_post = sales_df[(~sales_df['is_treatment']) & ((sales_df['is_test_period']) | (sales_df['is_post_period']))]['sales_revenue'].mean()
 
     treatment_change = treatment_post - treatment_pre
     control_change = control_post - control_pre
     did_effect = treatment_change - control_change
     pct_lift = (did_effect / control_post) * 100
 
-    # Estimate standard error (simplified)
-    treatment_std = sales_df[(sales_df['is_treatment']) & (sales_df['is_test_period'])]['sales_revenue'].std()
-    control_std = sales_df[(~sales_df['is_treatment']) & (sales_df['is_test_period'])]['sales_revenue'].std()
-    n_treatment = len(sales_df[(sales_df['is_treatment']) & (sales_df['is_test_period'])])
-    n_control = len(sales_df[(~sales_df['is_treatment']) & (sales_df['is_test_period'])])
+    # Estimate standard error (simplified) using test + post periods
+    treatment_std = sales_df[(sales_df['is_treatment']) & ((sales_df['is_test_period']) | (sales_df['is_post_period']))]['sales_revenue'].std()
+    control_std = sales_df[(~sales_df['is_treatment']) & ((sales_df['is_test_period']) | (sales_df['is_post_period']))]['sales_revenue'].std()
+    n_treatment = len(sales_df[(sales_df['is_treatment']) & ((sales_df['is_test_period']) | (sales_df['is_post_period']))])
+    n_control = len(sales_df[(~sales_df['is_treatment']) & ((sales_df['is_test_period']) | (sales_df['is_post_period']))])
     std_error = np.sqrt((treatment_std**2 / n_treatment) + (control_std**2 / n_control))
 
     # Confidence interval
@@ -163,12 +163,12 @@ def render():
         """, unsafe_allow_html=True)
 
     with col3:
-        total_incremental = did_effect * len(sales_df[sales_df['is_test_period']])
+        total_incremental = did_effect * len(sales_df[(sales_df['is_test_period']) | (sales_df['is_post_period'])])
         st.markdown(f"""
         <div class='ust-card'>
             <div class='ust-eyebrow'>Total Incremental Sales</div>
             <h2 style='color: #006E74; font-size: 1.8rem; margin: 12px 0;'>${total_incremental:,.0f}</h2>
-            <p style='color: #666;'>During test period</p>
+            <p style='color: #666;'>Test + Post periods</p>
         </div>
         """, unsafe_allow_html=True)
 
@@ -347,6 +347,105 @@ def render():
     st.markdown("---")
 
     # ========================================================================
+    # SECTION 2.5: POST-PERIOD PERSISTENCE ANALYSIS
+    # ========================================================================
+
+    st.markdown("### 📅 Post-Period Effect Persistence")
+
+    st.html("""
+    <div class='ust-info-box'>
+        <h4>Does the Effect Last?</h4>
+        <p><strong>Critical Question:</strong> After the marketing campaign ends, do the effects persist or fade away?</p>
+        <p>This analysis compares treatment effects during the test period vs. the post period to assess sustainability.</p>
+    </div>
+    """)
+
+    # Calculate test period effect
+    test_treatment = sales_df[(sales_df['is_treatment']) & (sales_df['is_test_period'])]['sales_revenue'].mean()
+    test_control = sales_df[(~sales_df['is_treatment']) & (sales_df['is_test_period'])]['sales_revenue'].mean()
+    test_effect = test_treatment - test_control
+    test_effect_pct = (test_effect / test_control) * 100 if test_control > 0 else 0
+
+    # Calculate post period effect
+    post_treatment = sales_df[(sales_df['is_treatment']) & (sales_df['is_post_period'])]['sales_revenue'].mean()
+    post_control = sales_df[(~sales_df['is_treatment']) & (sales_df['is_post_period'])]['sales_revenue'].mean()
+    post_effect = post_treatment - post_control
+    post_effect_pct = (post_effect / post_control) * 100 if post_control > 0 else 0
+
+    # Persistence ratio
+    persistence_ratio = (post_effect / test_effect) if test_effect != 0 else 0
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.html(f"""
+        <div class='ust-card'>
+            <div class='ust-eyebrow'>Test Period Effect</div>
+            <h2 style='color: #FF6B00; font-size: 2rem; margin: 12px 0;'>{test_effect_pct:+.1f}%</h2>
+            <p style='color: #666;'>During campaign</p>
+        </div>
+        """)
+
+    with col2:
+        st.html(f"""
+        <div class='ust-card'>
+            <div class='ust-eyebrow'>Post Period Effect</div>
+            <h2 style='color: #0097AC; font-size: 2rem; margin: 12px 0;'>{post_effect_pct:+.1f}%</h2>
+            <p style='color: #666;'>After campaign ends</p>
+        </div>
+        """)
+
+    with col3:
+        persistence_color = '#006E74' if persistence_ratio > 0.5 else '#FF6B00' if persistence_ratio > 0 else '#DC3545'
+        st.html(f"""
+        <div class='ust-card ust-card-accent'>
+            <div class='ust-eyebrow'>Persistence Ratio</div>
+            <h2 style='color: {persistence_color}; font-size: 2rem; margin: 12px 0;'>{persistence_ratio:.1%}</h2>
+            <p style='color: #666;'>Effect retention</p>
+        </div>
+        """)
+
+    # Interpretation
+    if persistence_ratio > 0.8:
+        st.html("""
+        <div class='ust-success-box'>
+            <h4>✅ Excellent Persistence</h4>
+            <p><strong>The marketing effect is highly durable.</strong> Post-period effects are strong, indicating
+            lasting behavior change, brand loyalty, or sustained customer acquisition.</p>
+            <p><strong>Implication:</strong> Marketing investment delivers long-term value beyond the immediate campaign period.</p>
+        </div>
+        """)
+    elif persistence_ratio > 0.5:
+        st.html("""
+        <div class='ust-info-box'>
+            <h4>✓ Good Persistence</h4>
+            <p><strong>The effect partially persists after campaign ends.</strong> About half of the impact remains,
+            suggesting some lasting effects mixed with campaign-specific lift.</p>
+            <p><strong>Implication:</strong> Consider longer campaign durations or retention programs to maximize sustained value.</p>
+        </div>
+        """)
+    elif persistence_ratio > 0:
+        st.html("""
+        <div class='ust-accent-box'>
+            <h4>⚠️ Moderate Decay</h4>
+            <p><strong>The effect decays significantly after campaign ends.</strong> Most of the lift appears
+            campaign-specific (e.g., promotional response or stockpiling).</p>
+            <p><strong>Implication:</strong> Focus on strategies that build lasting relationships rather than short-term promotions.</p>
+        </div>
+        """)
+    else:
+        st.html("""
+        <div class='ust-accent-box'>
+            <h4>⚠️ No Persistence / Negative Effect</h4>
+            <p><strong>The effect does not persist or reverses post-campaign.</strong> This suggests stockpiling
+            or borrowing from future sales.</p>
+            <p><strong>Implication:</strong> Re-evaluate promotional strategy to focus on sustainable growth mechanisms.</p>
+        </div>
+        """)
+
+    st.markdown("---")
+
+    # ========================================================================
     # SECTION 3: HETEROGENEOUS EFFECTS - RETAIL CHANNELS
     # ========================================================================
 
@@ -451,10 +550,10 @@ def render():
             label = f'{promo_type} Promotion'
 
         if len(promo_data) > 0:
-            treat_pre = promo_data[(promo_data['is_treatment']) & (~promo_data['is_test_period'])]['sales_revenue'].mean()
-            treat_post = promo_data[(promo_data['is_treatment']) & (promo_data['is_test_period'])]['sales_revenue'].mean()
-            ctrl_pre = promo_data[(~promo_data['is_treatment']) & (~promo_data['is_test_period'])]['sales_revenue'].mean()
-            ctrl_post = promo_data[(~promo_data['is_treatment']) & (promo_data['is_test_period'])]['sales_revenue'].mean()
+            treat_pre = promo_data[(promo_data['is_treatment']) & (promo_data['is_pre_period'])]['sales_revenue'].mean()
+            treat_post = promo_data[(promo_data['is_treatment']) & ((promo_data['is_test_period']) | (promo_data['is_post_period']))]['sales_revenue'].mean()
+            ctrl_pre = promo_data[(~promo_data['is_treatment']) & (promo_data['is_pre_period'])]['sales_revenue'].mean()
+            ctrl_post = promo_data[(~promo_data['is_treatment']) & ((promo_data['is_test_period']) | (promo_data['is_post_period']))]['sales_revenue'].mean()
 
             # Check all values are valid and non-zero
             if (pd.notna(treat_pre) and pd.notna(treat_post) and

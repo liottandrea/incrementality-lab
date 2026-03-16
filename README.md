@@ -392,3 +392,70 @@ MIT License - see LICENSE file for details
 
 For questions or support, contact: your.email@example.com
 
+
+
+
+Heikenek Story
+Logistics, E2E, agentic AI
+
+i want to show you a platform we have build which a suite of app and accelators for various AI problem. UST Pulse.
+this container is meant to be serve and pick only the service you need and incregate with your way of working.
+i would like to run through a e2e example of how UST pulse can support your logistic functions.
+we start with forecasting thye price of several lanes which will need to move our final produce from our brewery to final vendor.
+Forecast: we forecast the price of each lane for 12 months. we're using the past ingormatio
+we are taking into consideration only one countries with 100 lanes, and 5 logistic supplier. each supplier offers different prices for each lanes and make discount if you buy more than 5 lanes. 
+
+
+jdbc:postgresql://***REMOVED***:5432/***REMOVED***
+
+
+
+postgres
+***REMOVED***
+
+
+
+CompositeHandler
+PostGreSqlMuxCompositeHandler
+-
+DefaultConnectionString
+postgres://jdbc:postgresql://***REMOVED***:5432/***REMOVED***?user=postgres&password=***REMOVED***
+-
+DefaultScale
+0
+-
+DisableSpillEncryption
+false
+-
+LambdaFunctionName
+***REMOVED***
+-
+LambdaMemory
+3008
+-
+LambdaRoleARN
+-
+-
+LambdaTimeout
+900
+-
+PermissionsBoundaryARN
+-
+-
+SecretNamePrefix
+***REMOVED***
+
+-
+SecurityGroupIds
+***REMOVED***
+-
+SpillBucket
+***REMOVED***
+-
+SpillPrefix
+athena-spill
+-
+SubnetIds
+***REMOVED***,***REMOVED***
+
+

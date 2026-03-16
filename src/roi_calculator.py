@@ -48,7 +48,7 @@ class MultiPeriodROI:
         self,
         test_start_date,
         treatment_dmas,
-        profit_margin: float = 0.40,
+        profit_margin: float = 0.80,
         avg_clv: float = 150.0,
         retention_rate: float = 0.60,
         discount_rate: float = 0.10
@@ -119,18 +119,12 @@ class MultiPeriodROI:
         self.test_start_date = test_start_date
         self.treatment_dmas = treatment_dmas
     
-    def calculate_short_term_roi(self, profit_margin: float = 0.40) -> Dict:
+    def calculate_short_term_roi(self, profit_margin: float = 0.80) -> Dict:
         """
-        Calculate short-term ROI (first 4 weeks of test)
+        Calculate short-term ROI (test period only)
         """
-        # Define short-term period (4 weeks)
-        short_end = self.test_start_date + pd.Timedelta(weeks=4)
-        
-        # Get sales in short-term period
-        short_df = self.sales_df[
-            (self.sales_df['date'] >= self.test_start_date) &
-            (self.sales_df['date'] < short_end)
-        ]
+        # Get sales in test period using the is_test_period flag
+        short_df = self.sales_df[self.sales_df['is_test_period'] == True].copy()
         
         # Treatment group sales
         treatment_sales = short_df[
@@ -153,12 +147,14 @@ class MultiPeriodROI:
         # Incremental profit
         incremental_profit = incremental_sales * profit_margin
         
-        # Marketing spend in short-term
+        # Marketing spend in test period
         spend_df = self.media_df[
             (self.media_df['date'] >= self.test_start_date) &
-            (self.media_df['date'] < short_end) &
             (self.media_df['geo_id'].isin(self.treatment_dmas))
         ]
+        # Filter to test period dates only
+        test_dates = short_df['date'].unique()
+        spend_df = spend_df[spend_df['date'].isin(test_dates)]
         total_spend = spend_df['spend_usd'].sum()
         
         # Calculate ROI metrics
@@ -173,7 +169,7 @@ class MultiPeriodROI:
         print(f"   ROI: {roi*100:.1f}%")
         
         return {
-            'period': 'Weeks 1-4',
+            'period': 'Test Period',
             'incremental_sales': incremental_sales,
             'incremental_profit': incremental_profit,
             'marketing_spend': total_spend,
@@ -183,18 +179,15 @@ class MultiPeriodROI:
             'roi_pct': roi * 100
         }
     
-    def calculate_medium_term_roi(self, profit_margin: float = 0.40) -> Dict:
+    def calculate_medium_term_roi(self, profit_margin: float = 0.80) -> Dict:
         """
-        Calculate medium-term ROI (12 weeks, adjusted for stockpiling)
+        Calculate medium-term ROI (test + post periods, adjusted for stockpiling)
         """
-        # Define medium-term period (12 weeks)
-        medium_end = self.test_start_date + pd.Timedelta(weeks=12)
-        
-        # Get sales in medium-term period
+        # Get sales in test + post periods
         medium_df = self.sales_df[
-            (self.sales_df['date'] >= self.test_start_date) &
-            (self.sales_df['date'] < medium_end)
-        ]
+            (self.sales_df['is_test_period'] == True) |
+            (self.sales_df['is_post_period'] == True)
+        ].copy()
         
         # Treatment group sales
         treatment_sales = medium_df[
@@ -213,15 +206,23 @@ class MultiPeriodROI:
         # Incremental sales
         incremental_sales = treatment_sales - control_sales_scaled
         
-        # Adjust for stockpiling if data available
+        # Adjust for stockpiling if data available AND stockpiling is detected
         if self.purchase_dynamics and 'stockpiling' in self.purchase_dynamics:
+            classification = self.purchase_dynamics['stockpiling']['summary'].get('classification', 'UNCLEAR')
             stockpiling_ratio = self.purchase_dynamics['stockpiling']['Treatment'].get('stockpiling_ratio', 0)
-            
-            # Reduce incremental sales by stockpiling effect
-            stockpiling_adjustment = incremental_sales * stockpiling_ratio * 0.5  # 50% of stockpiling
-            incremental_sales_adjusted = incremental_sales - stockpiling_adjustment
-            
-            print(f"   Stockpiling adjustment: -${stockpiling_adjustment:,.0f}")
+
+            # Only apply adjustment if stockpiling is actually detected
+            if classification in ['HIGH_STOCKPILING', 'MODERATE_STOCKPILING']:
+                # Reduce incremental sales by stockpiling effect
+                stockpiling_adjustment = incremental_sales * stockpiling_ratio * 0.5  # 50% of stockpiling
+                incremental_sales_adjusted = incremental_sales - stockpiling_adjustment
+                print(f"   Stockpiling detected ({classification})")
+                print(f"   Stockpiling adjustment: -${stockpiling_adjustment:,.0f}")
+            else:
+                # No stockpiling - use full incremental sales
+                incremental_sales_adjusted = incremental_sales
+                stockpiling_adjustment = 0
+                print(f"   No stockpiling detected ({classification}) - using full incremental sales")
         else:
             incremental_sales_adjusted = incremental_sales
             stockpiling_adjustment = 0
@@ -229,10 +230,10 @@ class MultiPeriodROI:
         # Incremental profit
         incremental_profit = incremental_sales_adjusted * profit_margin
         
-        # Marketing spend
+        # Marketing spend (test + post periods)
+        medium_dates = medium_df['date'].unique()
         spend_df = self.media_df[
-            (self.media_df['date'] >= self.test_start_date) &
-            (self.media_df['date'] < medium_end) &
+            (self.media_df['date'].isin(medium_dates)) &
             (self.media_df['geo_id'].isin(self.treatment_dmas))
         ]
         total_spend = spend_df['spend_usd'].sum()
@@ -248,7 +249,7 @@ class MultiPeriodROI:
         print(f"   ROI: {roi*100:.1f}%")
         
         return {
-            'period': 'Weeks 1-12',
+            'period': 'Test + Post Periods',
             'incremental_sales_raw': incremental_sales,
             'stockpiling_adjustment': stockpiling_adjustment,
             'incremental_sales_adjusted': incremental_sales_adjusted,
@@ -262,7 +263,7 @@ class MultiPeriodROI:
     
     def calculate_long_term_roi(
         self,
-        profit_margin: float = 0.40,
+        profit_margin: float = 0.80,
         avg_clv: float = 150.0,
         retention_rate: float = 0.60,
         discount_rate: float = 0.10
@@ -318,7 +319,7 @@ class MultiPeriodROI:
         print(f"   ROI: {roi*100:.1f}%")
         
         return {
-            'period': '12+ weeks (with CLV)',
+            'period': 'All Periods (with CLV)',
             'incremental_profit_base': incremental_profit_base,
             'clv_contribution': total_clv,
             'new_customers': n_new_customers,
@@ -329,7 +330,7 @@ class MultiPeriodROI:
             'roi_pct': roi * 100
         }
     
-    def calculate_scenario_roi(self, profit_margin: float = 0.40, avg_clv: float = 150.0) -> Dict:
+    def calculate_scenario_roi(self, profit_margin: float = 0.80, avg_clv: float = 150.0) -> Dict:
         """
         Calculate ROI for different scenarios:
         1. Stockpiling scenario (worst case)
@@ -400,47 +401,62 @@ class MultiPeriodROI:
         
         return scenarios
     
-    def calculate_channel_roi(self, profit_margin: float = 0.40) -> Dict:
+    def calculate_channel_roi(self, profit_margin: float = 0.80) -> Dict:
         """
-        Calculate ROI by retail channel
+        Calculate ROI by retail channel using proper DiD methodology
         """
         if not self.hte_results or 'channel_effects' not in self.hte_results:
             return {}
-        
+
         channel_effects = self.hte_results['channel_effects']
-        
-        # Get test period data
-        test_df = self.sales_df[self.sales_df['is_post'] == True]
+
+        # Get test + post period data
+        test_df = self.sales_df[
+            (self.sales_df['is_test_period'] == True) |
+            (self.sales_df['is_post_period'] == True)
+        ]
         spend_df = self.media_df[self.media_df['date'] >= self.test_start_date]
-        
+
         channel_roi = {}
-        
+
+        # Calculate total spend for allocation
+        total_spend = spend_df[
+            spend_df['geo_id'].isin(self.treatment_dmas)
+        ]['spend_usd'].sum()
+
         for channel, effect_data in channel_effects.items():
-            # Sales for this channel
-            channel_sales = test_df[
+            # Treatment sales for this channel
+            treatment_sales = test_df[
                 (test_df['retail_channel'] == channel) &
                 (test_df['is_treatment'] == True)
             ]['sales_revenue'].sum()
-            
-            # Incremental sales based on lift %
-            lift_pct = effect_data['pct_lift'] / 100
-            incremental_sales = channel_sales * (lift_pct / (1 + lift_pct))
-            
+
+            # Control sales for this channel (scaled to treatment size)
+            control_sales = test_df[
+                (test_df['retail_channel'] == channel) &
+                (test_df['is_treatment'] == False)
+            ]['sales_revenue'].sum()
+
+            # Scale control to treatment group size
+            n_treatment = len(self.treatment_dmas)
+            n_control = len([d for d in self.sales_df['geo_id'].unique() if d not in self.treatment_dmas])
+            control_sales_scaled = control_sales * (n_treatment / n_control) if n_control > 0 else 0
+
+            # Incremental sales (DiD approach)
+            incremental_sales = treatment_sales - control_sales_scaled
+
             # Profit
             incremental_profit = incremental_sales * profit_margin
-            
-            # Spend (allocate proportionally by channel sales share)
-            total_spend = spend_df[
-                spend_df['geo_id'].isin(self.treatment_dmas)
-            ]['spend_usd'].sum()
-            
-            channel_share = channel_sales / test_df[test_df['is_treatment']==True]['sales_revenue'].sum()
+
+            # Allocate spend proportionally by treatment sales share
+            total_treatment_sales = test_df[test_df['is_treatment']==True]['sales_revenue'].sum()
+            channel_share = treatment_sales / total_treatment_sales if total_treatment_sales > 0 else 0
             channel_spend = total_spend * channel_share
-            
+
             # ROI
             roi = (incremental_profit - channel_spend) / channel_spend if channel_spend > 0 else 0
             profit_roas = incremental_profit / channel_spend if channel_spend > 0 else 0
-            
+
             channel_roi[channel] = {
                 'incremental_sales': incremental_sales,
                 'incremental_profit': incremental_profit,
@@ -449,9 +465,9 @@ class MultiPeriodROI:
                 'roi': roi,
                 'roi_pct': roi * 100
             }
-            
+
             print(f"   {channel}: ROAS = {profit_roas:.2f}x, ROI = {roi*100:.1f}%")
-        
+
         return channel_roi
     
     def generate_summary_report(self, results: Dict):
@@ -507,16 +523,16 @@ if __name__ == "__main__":
     import json
     
     # Load data
-    sales_df = pd.read_csv('data/synthetic_v2/brightline_sales_v2.csv')
-    media_df = pd.read_csv('data/synthetic_v2/brightline_media_v2.csv')
+    sales_df = pd.read_csv('data/demo/demo_sales.csv')
+    media_df = pd.read_csv('data/demo/demo_media.csv')
     
     try:
-        transactions_df = pd.read_csv('data/synthetic_v2/brightline_transactions_v2.csv')
+        transactions_df = pd.read_csv('data/demo/demo_transactions.csv')
     except:
         transactions_df = None
     
     # Load metadata
-    with open('data/synthetic_v2/metadata_v2.json', 'r') as f:
+    with open('data/demo/demo_metadata.json', 'r') as f:
         metadata = json.load(f)
     
     # Initialize calculator
@@ -526,7 +542,7 @@ if __name__ == "__main__":
     results = roi_calc.calculate_complete_roi(
         test_start_date=metadata['test_start_date'],
         treatment_dmas=metadata['treatment_dmas'],
-        profit_margin=0.40,
+        profit_margin=0.80,
         avg_clv=150.0,
         retention_rate=0.60,
         discount_rate=0.10

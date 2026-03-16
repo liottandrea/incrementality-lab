@@ -69,9 +69,9 @@ class BrightlineDataGeneratorV4:
         start_date: str = '2024-01-01',
         treatment_pct: float = 0.7,
         price_effect: float = 0.30,
-        visibility_effect: float = 0.18,
+        visibility_effect: float = 0.20,
         sustained_effect: float = 0.12,  # Lift remains after test ends!
-        spend_increase: float = 0.20
+        spend_increase: float = 0.10
     ) -> Dict[str, pd.DataFrame]:
         """
         Generate complete dataset with pre/test/post periods
@@ -367,7 +367,7 @@ class BrightlineDataGeneratorV4:
                         'week': week_idx + 1,
                         'geo_id': dma,
                         'channel': media_channel,
-                        'spend_usd': spend,
+                        'spend_usd': spend * 0.70,
                         'impressions': int(spend * np.random.uniform(45, 55)),
                         'clicks': int(spend * np.random.uniform(1.3, 1.7))
                     })
@@ -519,9 +519,9 @@ if __name__ == "__main__":
         post_period_weeks=12,
         treatment_pct=0.7,
         price_effect=0.30,
-        visibility_effect=0.18,
+        visibility_effect=0.20,
         sustained_effect=0.12,
-        spend_increase=0.20
+        spend_increase=0.10
     )
     
     generator.save_datasets(datasets)
