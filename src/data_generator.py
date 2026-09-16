@@ -170,7 +170,7 @@ class EnhancedBrightlineDataGenerator:
         sales_summary = []
         
         # Number of customers per DMA
-        customers_per_dma = 500  # Average
+        customers_per_dma = 100  # Average (kept small for a lightweight public demo dataset)
         
         for date in dates:
             is_test_period = date >= test_start_date
@@ -404,9 +404,9 @@ if __name__ == "__main__":
     generator = EnhancedBrightlineDataGenerator(seed=42)
     
     datasets = generator.generate_complete_dataset(
-        n_weeks=104,
-        n_geos=150,
-        test_period_weeks=20,
+        n_weeks=52,
+        n_geos=50,
+        test_period_weeks=12,
         treatment_pct=0.7,
         price_effect_size=0.15,
         visibility_effect_size=0.08
